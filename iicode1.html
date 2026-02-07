@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Telegram Bot Sender</title>
+    <style>
+        body { font-family: Arial, sans-serif; max-width: 500px; margin: 50px auto; padding: 20px; }
+        input, textarea, button { width: 100%; padding: 12px; margin: 10px 0; box-sizing: border-box; }
+        button { background: #0088cc; color: white; border: none; cursor: pointer; font-size: 16px; }
+        button:disabled { background: #ccc; cursor: not-allowed; }
+        .status { padding: 10px; margin: 10px 0; border-radius: 5px; }
+        .success { background: #d4edda; color: #155724; }
+        .error { background: #f8d7da; color: #721c24; }
+        #messageId { margin-top: 15px; font-weight: bold; color: #0088cc; }
+    </style>
+</head>
+<body>
+    <h1>Отправка в Telegram Bot</h1>
+    
+    <input type="number" id="chatId" value="5407825036" placeholder="Chat ID">
+    <textarea id="message" rows="4" placeholder="Введите сообщение...">тест</textarea>
+    
+    <button onclick="sendMessage()">Отправить сообщение</button>
+    <button onclick="editMessage()" id="editBtn" disabled>✏️ Редактировать</button>
+    
+    <div id="status"></div>
+    <div id="messageId"></div>
+
+    <script>
+        const BOT_TOKEN = '6639181665:AAF98IaosMehuMvoKy3vqw5KbudGw96R9jk';
+        const API_URL = `https://api.telegram.org/bot${BOT_TOKEN}`;
+        let currentMessageId = null;
+
+        async function showStatus(text, isError = false) {
+            const status = document.getElementById('status');
+            status.textContent = text;
+            status.className = `status ${isError ? 'error' : 'success'}`;
+        }
+
+        async function sendMessage() {
+            const chatId = document.getElementById('chatId').value;
+            const text = document.getElementById('message').value;
+            
+            if (!chatId || !text) {
+                showStatus('Заполните все поля!', true);
+                return;
+            }
+
+            try {
+                showStatus('Отправка...');
+                document.querySelector('button').disabled = true;
+
+                const response = await fetch(`${API_URL}/sendMessage`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        chat_id: chatId,
+                        text: text
+                    })
+                });
+
+                const data = await response.json();
+                
+                if (data.ok) {
+                    currentMessageId = data.result.message_id;
+                    document.getElementById('messageId').textContent = 
+                        `Message ID: ${currentMessageId}`;
+                    document.getElementById('editBtn').disabled = false;
+                    showStatus('✅ Сообщение отправлено!');
+                } else {
+                    throw new Error(data.description);
+                }
+            } catch (error) {
+                showStatus('❌ Ошибка: ' + error.message, true);
+            } finally {
+                document.querySelector('button').disabled = false;
+            }
+        }
+
+        async function editMessage() {
+            if (!currentMessageId) return;
+
+            const chatId = document.getElementById('chatId').value;
+            const text = document.getElementById('message').value;
+
+            try {
+                showStatus('Обновление...');
+                document.getElementById('editBtn').disabled = true;
+
+                const response = await fetch(`${API_URL}/editMessageText`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        chat_id: chatId,
+                        message_id: currentMessageId,
+                        text: text
+                    })
+                });
+
+                const data = await response.json();
+                
+                if (data.ok) {
+                    showStatus('✅ Сообщение обновлено!');
+                } else {
+                    throw new Error(data.description);
+                }
+            } catch (error) {
+                showStatus('❌ Ошибка: ' + error.message, true);
+            } finally {
+                document.getElementById('editBtn').disabled = false;
+            }
+        }
+
+        // Enter для отправки
+        document.addEventListener('keypress', function(e) {
+            if (e.key === 'Enter' && e.ctrlKey) {
+                sendMessage();
+            }
+        });
+    </script>
+</body>
+</html>
