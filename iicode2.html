@@ -3,247 +3,85 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Telegram Bot Panel v2</title>
+    <title>Telegram Bot LIVE</title>
     <style>
-        body { font-family: Arial, sans-serif; max-width: 900px; margin: 20px auto; padding: 20px; }
-        input, textarea, button { width: 100%; padding: 12px; margin: 10px 0; box-sizing: border-box; }
-        button { background: #0088cc; color: white; border: none; cursor: pointer; font-size: 16px; }
-        button:disabled { background: #ccc; cursor: not-allowed; }
-        .status { padding: 10px; margin: 10px 0; border-radius: 5px; }
-        .success { background: #d4edda; color: #155724; }
-        .error { background: #f8d7da; color: #721c24; }
-        #messages { max-height: 500px; overflow-y: auto; border: 1px solid #ddd; padding: 15px; background: #f9f9f9; }
-        .message { margin: 12px 0; padding: 12px; border-radius: 8px; background: white; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
-        .message.from-user { border-left: 4px solid #28a745; }
-        .message.from-bot { border-left: 4px solid #ffc107; }
-        .controls { display: flex; gap: 10px; margin: 10px 0; flex-wrap: wrap; }
-        .controls button { flex: 1; min-width: 130px; }
-        .clear-btn { background: #dc3545 !important; }
-        .load-btn { background: #17a2b8 !important; }
-        #messageId { font-weight: bold; color: #0088cc; margin: 10px 0; }
-        .stats { background: #e9ecef; padding: 10px; border-radius: 5px; margin: 10px 0; }
+        body { font-family: monospace; max-width: 900px; margin: 20px auto; padding: 20px; background: #1a1a1a; color: #fff; }
+        #log { background: #000; padding: 20px; height: 500px; overflow-y: auto; font-size: 14px; white-space: pre-wrap; border-radius: 8px; }
+        button { padding: 12px 24px; background: #0088cc; color: white; border: none; border-radius: 6px; cursor: pointer; margin: 5px; }
+        button:hover { background: #006699; }
+        .test-input { padding: 10px; background: #333; color: #fff; border: none; border-radius: 4px; width: 300px; }
     </style>
 </head>
 <body>
-    <h1>🤖 Telegram Bot Панель v2 (Работает!)</h1>
+    <h1>🔴 LIVE Telegram Bot Monitor</h1>
+    <button onclick="startBot()">▶️ Запустить мониторинг</button>
+    <button onclick="testSend()">📤 Тест сообщение</button>
+    <br><input class="test-input" id="testMsg" value="Привет с сайта!">
     
-    <input type="number" id="chatId" value="5407825036" placeholder="Chat ID">
-    <textarea id="message" rows="3" placeholder="Введите сообщение...">тест</textarea>
-    
-    <div class="controls">
-        <button onclick="sendMessage()">📤 Отправить</button>
-        <button onclick="editMessage()" id="editBtn" disabled>✏️ Редактировать</button>
-        <button onclick="loadMessages()" class="load-btn">📥 Загрузить историю</button>
-        <button onclick="startPolling()" class="load-btn">▶️ Long Polling</button>
-        <button onclick="clearMessages()" class="clear-btn">🗑️ Очистить</button>
-    </div>
-    
-    <div class="stats">
-        <strong>Сообщений: <span id="msgCount">0</span></strong> | 
-        Последнее обновление: <span id="lastUpdate">--</span>
-    </div>
-    
-    <div id="status"></div>
-    <div id="messageId"></div>
-    
-    <h3>📋 История сообщений чата:</h3>
-    <div id="messages"></div>
+    <h3>📡 Live лог:</h3>
+    <div id="log">Ожидание запуска...\n</div>
 
     <script>
-        const BOT_TOKEN = '6639181665:AAF98IaosMehuMvoKy3vqw5KbudGw96R9jk';
-        const API_URL = `https://api.telegram.org/bot${BOT_TOKEN}`;
-        let currentMessageId = null;
-        let updateOffset = 0;
-        let messages = [];
-        let pollingInterval = null;
+        const TOKEN = '6639181665:AAF98IaosMehuMvoKy3vqw5KbudGw96R9jk';
+        const API_URL = `https://api.telegram.org/bot${TOKEN}`;
+        let offset = 0;
+        let isRunning = false;
 
-        async function showStatus(text, isError = false) {
-            const status = document.getElementById('status');
-            status.textContent = text;
-            status.className = `status ${isError ? 'error' : 'success'}`;
-            console.log(text);
+        function log(text, color = '#fff') {
+            document.getElementById('log').innerHTML += 
+                `%c${new Date().toLocaleTimeString()} ${text}\n`.replace(/</g,'&lt;');
+            document.getElementById('log').scrollTop = 999999;
         }
 
-        async function apiCall(method, params = {}) {
-            try {
-                const response = await fetch(`${API_URL}/${method}`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(params)
-                });
-                return await response.json();
-            } catch (error) {
-                throw new Error(`API Error: ${error.message}`);
-            }
+        async function apiCall(method, params) {
+            const response = await fetch(`${API_URL}/${method}`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(params)
+            });
+            return await response.json();
         }
 
-        async function sendMessage() {
-            const chatId = document.getElementById('chatId').value;
-            const text = document.getElementById('message').value;
-            
-            if (!chatId || !text) return showStatus('Заполните все поля!', true);
-
+        async function getUpdatesLoop() {
             try {
-                const btn = document.querySelector('button[onclick="sendMessage()"]');
-                btn.disabled = true;
-                showStatus('Отправка...');
-
-                const data = await apiCall('sendMessage', { chat_id: chatId, text });
+                const data = await apiCall('getUpdates', {offset, limit: 10, timeout: 30});
                 
-                if (data.ok) {
-                    currentMessageId = data.result.message_id;
-                    document.getElementById('messageId').textContent = 
-                        `Текущее ID: ${currentMessageId}`;
-                    document.getElementById('editBtn').disabled = false;
-                    showStatus('✅ Отправлено!');
-                    loadMessages(); // Обновляем список
-                } else {
-                    throw new Error(data.description);
-                }
-            } catch (error) {
-                showStatus('❌ ' + error.message, true);
-            } finally {
-                document.querySelector('button[onclick="sendMessage()"]').disabled = false;
-            }
-        }
-
-        async function editMessage() {
-            if (!currentMessageId) return;
-            const chatId = document.getElementById('chatId').value;
-            const text = document.getElementById('message').value;
-
-            try {
-                document.getElementById('editBtn').disabled = true;
-                showStatus('Обновление...');
-
-                const data = await apiCall('editMessageText', {
-                    chat_id: chatId,
-                    message_id: currentMessageId,
-                    text
-                });
+                log(`📥 Получено обновлений: ${data.result?.length || 0}`);
                 
-                if (data.ok) {
-                    showStatus('✅ Обновлено!');
-                    loadMessages();
-                } else {
-                    throw new Error(data.description);
-                }
-            } catch (error) {
-                showStatus('❌ ' + error.message, true);
-            } finally {
-                document.getElementById('editBtn').disabled = false;
-            }
-        }
-
-        // 🔥 ГЛАВНАЯ ФУНКЦИЯ - Загрузка истории
-        async function loadMessages() {
-            const chatId = document.getElementById('chatId').value;
-            if (!chatId) return showStatus('Введите Chat ID!', true);
-
-            try {
-                showStatus('🔄 Загрузка истории...');
-                document.querySelector('button[onclick="loadMessages()"]').disabled = true;
-
-                // Получаем обновления с начала
-                const data = await apiCall('getUpdates', {
-                    offset: updateOffset || -1, // -1 = все обновления
-                    limit: 100,
-                    timeout: 5
-                });
-
-                console.log('API Response:', data);
-
-                if (data.ok) {
-                    let newMessages = 0;
-                    
-                    data.result.forEach(update => {
-                        if (update.message && update.message.chat.id == chatId) {
+                if (data.ok && data.result) {
+                    for (let update of data.result) {
+                        offset = update.update_id + 1;
+                        
+                        if (update.message) {
                             const msg = update.message;
-                            const exists = messages.some(m => m.update_id === update.update_id);
-                            
-                            if (!exists) {
-                                messages.unshift({
-                                    update_id: update.update_id,
-                                    message_id: msg.message_id,
-                                    from: msg.from?.first_name || msg.from?.username || 'Unknown',
-                                    text: msg.text || '[Фото/Видео/Документ]',
-                                    date: new Date(msg.date * 1000).toLocaleString('ru-RU'),
-                                    is_bot: msg.from?.is_bot || false,
-                                    chat_id: msg.chat.id
-                                });
-                                newMessages++;
-                            }
+                            const from = msg.from?.first_name || msg.from?.username || 'Неизвестно';
+                            log(`💬 [${msg.chat.id}] ${from}: ${msg.text || '[медиа]'}`, 
+                                msg.from?.is_bot ? '#ffc107' : '#28a745');
                         }
-                        updateOffset = Math.max(updateOffset, update.update_id + 1);
-                    });
-
-                    displayMessages();
-                    document.getElementById('msgCount').textContent = messages.length;
-                    document.getElementById('lastUpdate').textContent = new Date().toLocaleTimeString('ru-RU');
-                    
-                    showStatus(`✅ Загружено ${newMessages} сообщений. Всего: ${messages.length}`);
-                } else {
-                    showStatus('ℹ️ Сообщений нет или ошибка API', true);
+                    }
                 }
-            } catch (error) {
-                showStatus('❌ ' + error.message, true);
-                console.error(error);
-            } finally {
-                document.querySelector('button[onclick="loadMessages()"]').disabled = false;
+            } catch(e) {
+                log(`❌ Ошибка: ${e.message}`, '#ff4444');
             }
+            
+            if (isRunning) setTimeout(getUpdatesLoop, 1000);
         }
 
-        // Long polling для новых сообщений
-        async function startPolling() {
-            if (pollingInterval) clearInterval(pollingInterval);
-            
-            showStatus('▶️ Long Polling запущен (каждые 15 сек)');
-            pollingInterval = setInterval(loadMessages, 15000);
-            
-            // Первая загрузка
-            loadMessages();
+        async function startBot() {
+            isRunning = true;
+            log('🚀 Мониторинг ЗАПУЩЕН! Отправь сообщение боту...', '#00ff88');
+            getUpdatesLoop();
         }
 
-        function displayMessages() {
-            const container = document.getElementById('messages');
-            const chatId = document.getElementById('chatId').value;
-            
-            // Фильтруем только для текущего чата
-            const chatMessages = messages.filter(m => m.chat_id == chatId);
-            
-            container.innerHTML = chatMessages.slice(0, 100).map(msg => `
-                <div class="message ${msg.is_bot ? 'from-bot' : 'from-user'}">
-                    <div style="display: flex; justify-content: space-between; align-items: center;">
-                        <strong>${msg.from}</strong>
-                        <small style="color:#666;">${msg.date}</small>
-                    </div>
-                    <div style="margin-top: 5px; word-break: break-word;">${msg.text}</div>
-                </div>
-            `).join('') || '<em>Сообщений нет. Нажмите "Загрузить историю"</em>';
-            
-            container.scrollTop = 0;
+        async function testSend() {
+            const text = document.getElementById('testMsg').value;
+            const data = await apiCall('sendMessage', {
+                chat_id: 5407825036,
+                text: `🌐 Web: ${text}`
+            });
+            log(data.ok ? '✅ Тест отправлен!' : `❌ ${data.description}`, 
+                data.ok ? '#00ff88' : '#ff4444');
         }
-
-        function clearMessages() {
-            messages = [];
-            updateOffset = 0;
-            displayMessages();
-            document.getElementById('msgCount').textContent = '0';
-            showStatus('🗑️ История очищена');
-        }
-
-        // Горячие клавиши
-        document.addEventListener('keypress', function(e) {
-            if (e.ctrlKey) {
-                if (e.key === 'Enter') sendMessage();
-                if (e.key === 'l' || e.key === 'Л') loadMessages();
-            }
-        });
-
-        // Инициализация при загрузке страницы
-        window.onload = () => {
-            showStatus('Готово! Нажмите "Загрузить историю"');
-        };
     </script>
 </body>
 </html>
