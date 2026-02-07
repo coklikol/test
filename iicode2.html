@@ -1,182 +1,68 @@
 <!DOCTYPE html>
-<html lang="ru">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Telegram Bot Panel ✅ РАБОТАЕТ</title>
-    <style>
-        body { font-family: Arial, sans-serif; max-width: 900px; margin: 20px auto; padding: 20px; }
-        input, textarea, button { width: 100%; padding: 12px; margin: 10px 0; box-sizing: border-box; }
-        button { background: #0088cc; color: white; border: none; cursor: pointer; font-size: 16px; }
-        button:disabled { background: #ccc; cursor: not-allowed; }
-        .status { padding: 10px; margin: 10px 0; border-radius: 5px; }
-        .success { background: #d4edda; color: #155724; }
-        .error { background: #f8d7da; color: #721c24; }
-        #messages { max-height: 500px; overflow-y: auto; border: 1px solid #ddd; padding: 15px; background: #f9f9f9; }
-        .message { margin: 12px 0; padding: 12px; border-radius: 8px; background: white; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
-        .message.from-user { border-left: 4px solid #28a745; }
-        .message.from-bot { border-left: 4px solid #ffc107; }
-        .controls { display: flex; gap: 10px; margin: 10px 0; flex-wrap: wrap; }
-        .controls button { flex: 1; min-width: 120px; }
-        .clear-btn { background: #dc3545 !important; }
-        .load-btn { background: #17a2b8 !important; }
-        #debug { background: #e9ecef; padding: 10px; font-family: monospace; font-size: 12px; max-height: 200px; overflow-y: auto; }
-    </style>
-</head>
-<body>
-    <h1>🤖 Telegram Bot Panel (ФИНАЛЬНАЯ)</h1>
+<html>
+<body style="font-family:monospace; padding:20px; background:#000; color:lime;">
+<h2>🔍 Telegram API ТЕСТЕР</h2>
+
+<input id="method" value="getUpdates" style="width:200px; padding:10px;">
+<button onclick="testAPI()">🚀 ТЕСТ API</button>
+<button onclick="testSend()">📤 Тест отправка</button>
+<button onclick="clearLog()">🗑️ Очистить</button>
+
+<pre id="log" style="background:#111; padding:20px; height:500px; overflow:auto; margin-top:20px; white-space:pre-wrap;">Ожидание...</pre>
+
+<script>
+const TOKEN = '6639181665:AAF98IaosMehuMvoKy3vqw5KbudGw96R9jk';
+const API = `https://api.telegram.org/bot${TOKEN}`;
+
+async function testAPI() {
+    const method = document.getElementById('method').value;
+    log(`\n🔍 Запрос: ${API}/${method}`);
     
-    <input type="number" id="chatId" value="5407825036" placeholder="Chat ID">
-    <textarea id="message" rows="3" placeholder="Введите сообщение...">тест</textarea>
-    
-    <div class="controls">
-        <button onclick="sendMessage()">📤 Отправить</button>
-        <button onclick="editMessage()" id="editBtn" disabled>✏️ Редактировать</button>
-        <button onclick="startMonitor()" class="load-btn">▶️ Мониторинг</button>
-        <button onclick="clearMessages()" class="clear-btn">🗑️ Очистить</button>
-    </div>
-    
-    <div id="status"></div>
-    
-    <h3>📱 Сообщения (ВСЕ):</h3>
-    <div id="messages">Нажмите "▶️ Мониторинг" и отправьте боту сообщение!</div>
-    
-    <h4>🐛 Debug лог:</h4>
-    <div id="debug"></div>
-
-    <script>
-        const BOT_TOKEN = '6639181665:AAF98IaosMehuMvoKy3vqw5KbudGw96R9jk';
-        const API_URL = `https://api.telegram.org/bot${BOT_TOKEN}`;
-        let messages = [];
-        let offset = 0;
-        let monitorInterval = null;
-
-        function showStatus(text, isError = false) {
-            const status = document.getElementById('status');
-            status.textContent = text;
-            status.className = `status ${isError ? 'error' : 'success'}`;
-            debugLog(text);
-        }
-
-        function debugLog(text) {
-            const debug = document.getElementById('debug');
-            debug.innerHTML += `[${new Date().toLocaleTimeString()}] ${text}\n`;
-            debug.scrollTop = debug.scrollHeight;
-        }
-
-        async function apiCall(method, params = {}) {
-            const response = await fetch(`${API_URL}/${method}`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(params)
-            });
-            return await response.json();
-        }
-
-        async function sendMessage() {
-            const chatId = document.getElementById('chatId').value;
-            const text = document.getElementById('message').value;
-            
-            if (!chatId || !text) return showStatus('Заполните поля!', true);
-
-            try {
-                const data = await apiCall('sendMessage', { chat_id: chatId, text });
-                if (data.ok) {
-                    showStatus('✅ Отправлено!');
-                    if (monitorInterval) getUpdates(); // Обновляем мониторинг
-                } else {
-                    showStatus(`❌ ${data.description}`, true);
-                }
-            } catch (error) {
-                showStatus(`❌ ${error.message}`, true);
-            }
-        }
-
-        // 🔥 ГЛАВНАЯ ФУНКЦИЯ МОНИТОРИНГА
-        async function getUpdates() {
-            try {
-                const data = await apiCall('getUpdates', { 
-                    offset: offset, 
-                    limit: 20, 
-                    timeout: 10 
-                });
-
-                debugLog(`API вернул ${data.result?.length || 0} обновлений`);
-
-                if (data.ok && data.result) {
-                    for (let update of data.result) {
-                        offset = update.update_id + 1;
-                        
-                        if (update.message) {
-                            const msg = update.message;
-                            const fromName = msg.from?.first_name || 
-                                           msg.from?.username || 
-                                           msg.from?.id || 'Unknown';
-                            
-                            // ДОБАВЛЯЕМ БЕЗ ФИЛЬТРОВ - ПОКАЗЫВАЕМ ВСЕ!
-                            messages.unshift({
-                                id: msg.message_id,
-                                from: fromName,
-                                chatId: msg.chat.id,
-                                text: msg.text || '[медиа]',
-                                date: new Date(msg.date * 1000).toLocaleString('ru-RU'),
-                                isBot: msg.from?.is_bot || false
-                            });
-                            
-                            debugLog(`💬 Новое: [${msg.chat.id}] ${fromName}: ${msg.text}`);
-                        }
-                    }
-                    
-                    displayMessages();
-                    showStatus(`✅ ${data.result.length} новых сообщений`);
-                }
-            } catch (error) {
-                debugLog(`Ошибка API: ${error.message}`);
-            }
-        }
-
-        function displayMessages() {
-            const container = document.getElementById('messages');
-            const html = messages.slice(0, 50).map(msg => `
-                <div class="message ${msg.isBot ? 'from-bot' : 'from-user'}">
-                    <div style="display: flex; justify-content: space-between;">
-                        <strong>${msg.from}</strong>
-                        <small>${msg.date}</small>
-                    </div>
-                    <div style="margin-top: 5px; word-break: break-word;">
-                        📱 Чат: ${msg.chatId}<br>
-                        💬 ${msg.text}
-                    </div>
-                </div>
-            `).join('') || '<em>Сообщений нет. Отправьте боту что-нибудь!</em>';
-            
-            container.innerHTML = html;
-            container.scrollTop = 0;
-        }
-
-        function startMonitor() {
-            if (monitorInterval) {
-                clearInterval(monitorInterval);
-                showStatus('⏹️ Мониторинг остановлен');
-                return;
-            }
-            
-            showStatus('▶️ Мониторинг ЗАПУЩЕН!');
-            getUpdates(); // Первая загрузка
-            monitorInterval = setInterval(getUpdates, 3000); // Каждые 3 сек
-        }
-
-        function clearMessages() {
-            messages = [];
-            displayMessages();
-            showStatus('🗑️ Очищено');
-        }
-
-        // Горячие клавиши
-        document.addEventListener('keypress', (e) => {
-            if (e.ctrlKey && e.key === 'Enter') sendMessage();
-            if (e.ctrlKey && e.key === 'm') startMonitor();
+    try {
+        const res = await fetch(`${API}/${method}`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({offset: 0, limit: 5})
         });
-    </script>
+        
+        const data = await res.json();
+        log(`📡 РЕАЛЬНЫЙ ОТВЕТ:\n${JSON.stringify(data, null, 2)}`);
+        
+        if (data.ok && data.result?.length) {
+            log(`✅ ПРИШЛИ ${data.result.length} сообщений!`);
+        } else {
+            log(`❌ ПУСТО или ОШИБКА: ${data.description}`);
+        }
+    } catch(e) {
+        log(`💥 ОШИБКА: ${e.message}`);
+    }
+}
+
+async function testSend() {
+    log('\n📤 Отправляем тестовое сообщение...');
+    const res = await fetch(`${API}/sendMessage`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+            chat_id: 5407825036,
+            text: `🧪 ТЕСТ ${Date.now()}`
+        })
+    });
+    log(`📤 ОТВЕТ: ${await res.json()}`);
+}
+
+function log(text) {
+    document.getElementById('log').textContent += `${new Date().toLocaleTimeString()}: ${text}\n`;
+    document.getElementById('log').scrollTop = 99999;
+}
+
+function clearLog() {
+    document.getElementById('log').textContent = '';
+}
+
+// АВТОТЕСТ
+testAPI();
+setTimeout(testSend, 1000);
+</script>
 </body>
 </html>
